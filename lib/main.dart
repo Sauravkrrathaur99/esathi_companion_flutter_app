@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'dart:async'; // For Timer class
+import 'dart:developer' as developer;
 import 'package:intl/intl.dart'; // For date formatting
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -79,6 +81,9 @@ class HomePageContent extends StatefulWidget {
 
 class _HomePageContentState extends State<HomePageContent> {
   int _start = 3600; // 1 hour countdown (in seconds)
+  final Connectivity _connectivity = Connectivity();
+  late StreamSubscription<List<ConnectivityResult>> _connectivitySubscription;
+  ConnectivityResult _connectionStatus = ConnectivityResult.none; // Declare connection status
   String wifiStatus = "Unknown"; // Add this line to define wifiStatus
   final NetworkInfo _networkInfo = NetworkInfo(); // Moved inside the class
 
@@ -86,13 +91,57 @@ class _HomePageContentState extends State<HomePageContent> {
   void initState() {
     super.initState();
     _startTimer();
+    initConnectivity();
+    _connectivitySubscription =
+        _connectivity.onConnectivityChanged.listen(_updateConnectionStatus);
     _getWifiStatus();
      _getWifiInfo();  // Call this to get Wi-Fi info on startup
   }
+    // _getWifiStatus();
+    //  _getWifiInfo();  // Call this to get Wi-Fi info on startup
+  
 
   @override
   void dispose() {
+    _connectivitySubscription.cancel();
     super.dispose();
+  }
+
+  // Platform messages are asynchronous, so we initialize in an async method.
+  Future<void> initConnectivity() async {
+    late List<ConnectivityResult> result;
+    try {
+      result = await _connectivity.checkConnectivity();
+    } on PlatformException catch (e) {
+      developer.log('Couldn\'t check connectivity status', error: e);
+      return;
+    }
+
+    if (!mounted) {
+      return Future.value(null);
+    }
+
+    return _updateConnectionStatus(result);
+  }
+
+   Future<void> _updateConnectionStatus(List<ConnectivityResult> result) async {
+    if (result.isNotEmpty) {
+      setState(() {
+        _connectionStatus = result.first;
+      });
+
+      if (_connectionStatus == ConnectivityResult.wifi) {
+        _getWifiInfo(); // Fetch Wi-Fi details
+      } else if (_connectionStatus == ConnectivityResult.mobile) {
+        setState(() {
+          wifiStatus = "Please Be In Your Corporate Network";
+        });
+      } else {
+        setState(() {
+          wifiStatus = "No Internet Connection, connect to your corporate network";
+        });
+      }
+    }
   }
 
   void _startTimer() {
@@ -119,34 +168,6 @@ class _HomePageContentState extends State<HomePageContent> {
     return DateFormat('EEEE, MMM dd, yyyy').format(now);
   }
 
-// Future<void> _getWifiStatus() async {
-//   // Request permission before accessing Wi-Fi info
-//   PermissionStatus permissionStatus = await Permission.locationWhenInUse.request();
-//   print('Location Permission Status: $permissionStatus');
-  
-  
-//   if (permissionStatus.isGranted) {
-//     try {
-//       final String status = await MyApp.platform.invokeMethod('getWiFiStatus');
-//       print('Status wifi: $status');
-//       setState(() {
-//         wifiStatus = status;
-//       });
-//     } on PlatformException catch (e) {
-//       setState(() {
-//         wifiStatus = "Error: ${e.message}";
-//       });
-//     }
-//   } else {
-//     setState(() {
-//       wifiStatus = "Permission denied";
-//     });
-//   }
-// }
-
-
-
-
 Future<void> _getWifiStatus() async {
   // Request permission before accessing Wi-Fi info
   PermissionStatus permissionStatus = await Permission.locationWhenInUse.request();
@@ -155,7 +176,7 @@ Future<void> _getWifiStatus() async {
   if (permissionStatus.isGranted) {
     try {
       final String status = await MyApp.platform.invokeMethod('getWiFiStatus');
-      print('Status wifi: $status');
+      // print('Status wifi: $status');
       setState(() {
         wifiStatus = status;
       });
@@ -174,11 +195,27 @@ Future<void> _getWifiStatus() async {
 
 Future<void> _getWifiInfo() async {
   try {
-    final wifiName = await _networkInfo.getWifiName();
-    final wifiBSSID = await _networkInfo.getWifiBSSID();
-    final wifiIP = await _networkInfo.getWifiIP();
+    // final wifiName = await _networkInfo.getWifiName();
+    final wifiName = (await _networkInfo.getWifiName())?.replaceAll('"', '').trim();
+    // print("wifi name fetched after trim: $wifiName");
+
+    // Check for specific Wi-Fi names and update message accordingly
+    String connectionMessage = "Please be in your corporate network area"; // Default message
+    
+    if (wifiName == "Airtel_! Jai Shree Krishna !_5G") {
+      connectionMessage = "Connected via SuperTech";
+    } else if (wifiName == "MishiTech5G") {
+      connectionMessage = "Connected via MishiTech";
+    } else if (wifiName == "Onelogica_5G") {
+      connectionMessage = "Connected via Onelogica";
+    } else if (wifiName == "Airtel_TSA_5G") {
+      connectionMessage = "Connected via Tathagat_G2-1204";
+    }else if (wifiName == "Airtel_! Jai Shree Krishna !") {
+      connectionMessage = "Connected via SuperTech";
+    }
+
     setState(() {
-      wifiStatus = '"Wi-Fi Name": $wifiName, BSSID: $wifiBSSID, IP: $wifiIP';
+      wifiStatus = connectionMessage;
     });
   } catch (e) {
     setState(() {
@@ -278,7 +315,15 @@ Future<void> _getWifiInfo() async {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.network_check, color: Colors.blue),
+                    Icon(
+                      // Dynamic icon selection based on connectivity status
+                      _connectionStatus == ConnectivityResult.wifi
+                          ? Icons.network_check // Wi-Fi icon
+                          : _connectionStatus == ConnectivityResult.mobile
+                              ? Icons.signal_cellular_alt // Mobile data icon
+                              : Icons.signal_wifi_off, // No internet icon
+                      color: Colors.blue,
+                    ),
                     const SizedBox(width: 8),
                     Text(
                       wifiStatus,
