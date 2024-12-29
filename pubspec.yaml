@@ -16,6 +16,8 @@ dependencies:
   connectivity_plus: ^6.1.1
   network_info_plus: ^6.1.2
   permission_handler: ^10.0.0
+  flutter_fgbg: ^0.6.0
+  
 
   cupertino_icons: ^1.0.8
 
