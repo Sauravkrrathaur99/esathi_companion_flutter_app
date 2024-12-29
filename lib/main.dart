@@ -7,6 +7,7 @@ import 'package:network_info_plus/network_info_plus.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+
 void main() {
   runApp(const MyApp());
 }
@@ -79,7 +80,7 @@ class HomePageContent extends StatefulWidget {
   _HomePageContentState createState() => _HomePageContentState();
 }
 
-class _HomePageContentState extends State<HomePageContent> {
+class _HomePageContentState extends State<HomePageContent> with WidgetsBindingObserver {
   int _start = 3600; // 1 hour countdown (in seconds)
   final Connectivity _connectivity = Connectivity();
   late StreamSubscription<List<ConnectivityResult>> _connectivitySubscription;
@@ -90,6 +91,8 @@ class _HomePageContentState extends State<HomePageContent> {
   @override
   void initState() {
     super.initState();
+    // Attach the observer
+    WidgetsBinding.instance.addObserver(this);
     _startTimer();
     initConnectivity();
     _connectivitySubscription =
@@ -104,6 +107,8 @@ class _HomePageContentState extends State<HomePageContent> {
   @override
   void dispose() {
     _connectivitySubscription.cancel();
+    // Remove the observer when no longer needed
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
@@ -224,6 +229,25 @@ Future<void> _getWifiInfo() async {
   }
 }
 
+  // Listen for lifecycle changes
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+
+    if (state == AppLifecycleState.paused) {
+      // App moved to background
+      print("App in background");
+    } else if (state == AppLifecycleState.resumed) {
+      // App moved to foreground
+      print("App in foreground");
+    } else if (state == AppLifecycleState.inactive) {
+      // App is inactive (can occur when transitioning)
+      print("App inactive");
+    } else if (state == AppLifecycleState.detached) {
+      // App is detached (not visible)
+      print("App detached");
+    }
+  }
 
 
   @override
