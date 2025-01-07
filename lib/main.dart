@@ -6,11 +6,28 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'app_lifecycle_observer.dart';  // Import the AppLifecycleObserver
+import 'package:workmanager/workmanager.dart';
+
+
+
+// void main() {
+//   runApp(const MyApp());
+// }
 
 
 void main() {
-  runApp(const MyApp());
+  // Ensure Widgets Binding is initialized before other code
+  WidgetsFlutterBinding.ensureInitialized(); 
+
+  // Attach Lifecycle Observer
+  WidgetsBinding.instance.addObserver(AppLifecycleObserver());
+
+  // Start the app
+  runApp(MyApp());
 }
+
+
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -87,11 +104,15 @@ class _HomePageContentState extends State<HomePageContent> with WidgetsBindingOb
   ConnectivityResult _connectionStatus = ConnectivityResult.none; // Declare connection status
   String wifiStatus = "Unknown"; // Add this line to define wifiStatus
   final NetworkInfo _networkInfo = NetworkInfo(); // Moved inside the class
+  // final AppLifecycleObserver _lifecycleObserver = AppLifecycleObserver();
+
 
   @override
   void initState() {
     super.initState();
+    requestPermissions(); // Check permissions when the app starts
     // Attach the observer
+     WidgetsBinding.instance.addObserver(AppLifecycleObserver());
     WidgetsBinding.instance.addObserver(this);
     _startTimer();
     initConnectivity();
@@ -108,6 +129,7 @@ class _HomePageContentState extends State<HomePageContent> with WidgetsBindingOb
   void dispose() {
     _connectivitySubscription.cancel();
     // Remove the observer when no longer needed
+     WidgetsBinding.instance.removeObserver(AppLifecycleObserver());
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -138,6 +160,7 @@ class _HomePageContentState extends State<HomePageContent> with WidgetsBindingOb
       if (_connectionStatus == ConnectivityResult.wifi) {
         _getWifiInfo(); // Fetch Wi-Fi details
       } else if (_connectionStatus == ConnectivityResult.mobile) {
+        print("MOBILE DATA IS CONNECTED");
         setState(() {
           wifiStatus = "Please Be In Your Corporate Network";
         });
@@ -148,6 +171,7 @@ class _HomePageContentState extends State<HomePageContent> with WidgetsBindingOb
       }
     }
   }
+
 
   void _startTimer() {
     Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -173,6 +197,20 @@ class _HomePageContentState extends State<HomePageContent> with WidgetsBindingOb
     return DateFormat('EEEE, MMM dd, yyyy').format(now);
   }
 
+  Future<void> requestPermissions() async {
+    // Check if battery optimization is enabled
+    bool isIgnored = await Permission.ignoreBatteryOptimizations.isGranted;
+
+    if (!isIgnored) {
+      // Request to ignore battery optimizations
+      await Permission.ignoreBatteryOptimizations.request();
+    }
+
+    // Request other required permissions
+    await Permission.notification.request(); // For notifications if needed
+    await Permission.locationAlways.request(); // If location tracking is required
+  }
+
 Future<void> _getWifiStatus() async {
   // Request permission before accessing Wi-Fi info
   PermissionStatus permissionStatus = await Permission.locationWhenInUse.request();
@@ -181,7 +219,7 @@ Future<void> _getWifiStatus() async {
   if (permissionStatus.isGranted) {
     try {
       final String status = await MyApp.platform.invokeMethod('getWiFiStatus');
-      // print('Status wifi: $status');
+      print('Status wifi: $status');
       setState(() {
         wifiStatus = status;
       });
@@ -192,6 +230,7 @@ Future<void> _getWifiStatus() async {
     }
     _getWifiInfo();  // Get Wi-Fi info after permission is granted
   } else {
+    openAppSettings(); // Prompt the user to enable permissions in settings
     setState(() {
       wifiStatus = "Permission denied";
     });
@@ -202,7 +241,7 @@ Future<void> _getWifiInfo() async {
   try {
     // final wifiName = await _networkInfo.getWifiName();
     final wifiName = (await _networkInfo.getWifiName())?.replaceAll('"', '').trim();
-    // print("wifi name fetched after trim: $wifiName");
+    print("wifi name fetched after trim: $wifiName");
 
     // Check for specific Wi-Fi names and update message accordingly
     String connectionMessage = "Please be in your corporate network area"; // Default message
@@ -228,26 +267,6 @@ Future<void> _getWifiInfo() async {
     });
   }
 }
-
-  // Listen for lifecycle changes
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    super.didChangeAppLifecycleState(state);
-
-    if (state == AppLifecycleState.paused) {
-      // App moved to background
-      print("App in background");
-    } else if (state == AppLifecycleState.resumed) {
-      // App moved to foreground
-      print("App in foreground");
-    } else if (state == AppLifecycleState.inactive) {
-      // App is inactive (can occur when transitioning)
-      print("App inactive");
-    } else if (state == AppLifecycleState.detached) {
-      // App is detached (not visible)
-      print("App detached");
-    }
-  }
 
 
   @override
@@ -417,8 +436,30 @@ Future<void> _getWifiInfo() async {
   }
 }
 
-class HistoryPage extends StatelessWidget {
+
+
+
+class HistoryPage extends StatefulWidget {
   const HistoryPage({super.key});
+
+  @override
+  _HistoryPageState createState() => _HistoryPageState();
+}
+
+class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    // Register the observer
+    WidgetsBinding.instance.addObserver(AppLifecycleObserver());
+  }
+
+  @override
+  void dispose() {
+    // Remove the observer when the page is disposed
+    WidgetsBinding.instance.removeObserver(AppLifecycleObserver());
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -430,8 +471,28 @@ class HistoryPage extends StatelessWidget {
   }
 }
 
-class UserPage extends StatelessWidget {
+
+class UserPage extends StatefulWidget {
   const UserPage({super.key});
+
+  @override
+  _UserPageState createState() => _UserPageState();
+}
+
+class _UserPageState extends State<UserPage> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    // Register the observer
+    WidgetsBinding.instance.addObserver(AppLifecycleObserver());
+  }
+
+  @override
+  void dispose() {
+    // Remove the observer when the page is disposed
+    WidgetsBinding.instance.removeObserver(AppLifecycleObserver());
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
